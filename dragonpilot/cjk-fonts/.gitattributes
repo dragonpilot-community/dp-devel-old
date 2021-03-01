@@ -1,0 +1,3 @@
+NotoSansCJKtc-Bold.otf filter=lfs diff=lfs merge=lfs -text
+NotoSansCJKtc-Medium.otf filter=lfs diff=lfs merge=lfs -text
+NotoSansCJKtc-Regular.otf filter=lfs diff=lfs merge=lfs -text

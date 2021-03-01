@@ -192,11 +192,14 @@ def uploader_fn(exit_event):
   cloudlog.info("uploader_fn")
 
   params = Params()
-  dongle_id = params.get("DongleId").decode('utf8')
+  dongle_id = params.get("DongleId")
 
   if dongle_id is None:
-    cloudlog.info("uploader missing dongle_id")
-    raise Exception("uploader can't start without dongle id")
+    return
+    # cloudlog.info("uploader missing dongle_id")
+    # raise Exception("uploader can't start without dongle id")
+  else:
+    dongle_id = dongle_id.decode('utf8')
 
   sm = messaging.SubMaster(['deviceState'])
   uploader = Uploader(dongle_id, ROOT)

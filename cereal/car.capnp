@@ -120,6 +120,16 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     focusRecoverActiveDEPRECATED @86;
     neosUpdateRequiredDEPRECATED @88;
     modelLagWarningDEPRECATED @93;
+
+    #dp
+    manualSteeringRequired @96;
+    manualSteeringRequiredBlinkersOn @97;
+    leadCarMoving @98;
+
+    # timebomb assist
+    timebombWarn @99;
+    timebombBypassing @100;
+    timebombBypassed @101;
   }
 }
 

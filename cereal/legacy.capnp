@@ -344,23 +344,6 @@ struct CalibrationFeatures @0x8fdfadb254ea867a {
   status @3 :List(Int8);
 }
 
-struct NavStatus @0xbd8822120928120c {
-  isNavigating @0 :Bool;
-  currentAddress @1 :Address;
-
-  struct Address @0xce7cd672cacc7814 {
-    title @0 :Text;
-    lat @1 :Float64;
-    lng @2 :Float64;
-    house @3 :Text;
-    address @4 :Text;
-    street @5 :Text;
-    city @6 :Text;
-    state @7 :Text;
-    country @8 :Text;
-  }
-}
-
 struct NavUpdate @0xdb98be6565516acb {
   isNavigating @0 :Bool;
   curSegment @1 :Int32;

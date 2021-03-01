@@ -14,3 +14,4 @@ cdef extern from "selfdrive/common/params.h":
     string get(string, bool) nogil
     int delete_db_value(string)
     int write_db_value(string, string)
+    string get_params_path()

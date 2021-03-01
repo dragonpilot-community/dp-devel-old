@@ -3,6 +3,7 @@
 from libcpp cimport bool
 from libcpp.string cimport string
 from common.params_pxd cimport Params as c_Params
+from common.dp_conf import init_params_keys
 
 import os
 import threading
@@ -78,6 +79,8 @@ keys = {
   b"Offroad_HardwareUnsupported": [TxType.CLEAR_ON_MANAGER_START],
   b"ForcePowerDown": [TxType.CLEAR_ON_MANAGER_START],
 }
+
+keys = init_params_keys(keys, [TxType.PERSISTENT])
 
 def ensure_bytes(v):
   if isinstance(v, str):
@@ -156,6 +159,9 @@ cdef class Params:
   def delete(self, key):
     key = ensure_bytes(key)
     self.p.delete_db_value(key)
+
+  def get_params_path(self):
+    return self.p.get_params_path().decode("utf-8")
 
 
 def put_nonblocking(key, val, d=None):

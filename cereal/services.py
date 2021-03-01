@@ -60,6 +60,9 @@ service_list = {
   "testModel": Service(8040, False, 0.),
   "testLiveLocation": Service(8045, False, 0.),
   "testJoystick": Service(8056, False, 0.),
+  # dp
+  "dragonConf": Service(8888, False, 2.),
+  "thermal": Service(8889, True, 2., 1),
 }
 
 

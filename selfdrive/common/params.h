@@ -43,4 +43,6 @@ public:
   bool read_db_bool(const char* param_name);
 
   std::string get(std::string key, bool block=false);
+
+  std::string get_params_path();
 };

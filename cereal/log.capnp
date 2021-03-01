@@ -7,6 +7,7 @@ $Java.outerClassname("Log");
 
 using Car = import "car.capnp";
 using Legacy = import "legacy.capnp";
+using Dp = import "dp.capnp";
 
 @0xf3b1f17e25a4285b;
 
@@ -608,7 +609,7 @@ struct ControlsState @0x97ff69c53601abf1 {
   decelForTurnDEPRECATED @47 :Bool;
   decelForModelDEPRECATED @54 :Bool;
   awarenessStatusDEPRECATED @26 :Float32;
-  angleSteersDEPRECATED @13 :Float32;
+  angleSteers @13 :Float32; # dp
   vCurvatureDEPRECATED @46 :Float32;
   mapValidDEPRECATED @49 :Bool;
   jerkFactorDEPRECATED @12 :Float32;
@@ -777,6 +778,9 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   desire @17 :Desire;
   laneChangeState @18 :LaneChangeState;
   laneChangeDirection @19 :LaneChangeDirection;
+
+  # dp
+  dpALCAllowed @20 :Bool;
 
   enum Desire {
     none @0;
@@ -1342,7 +1346,7 @@ struct Event {
     androidGnssDEPRECATED @30 :Legacy.AndroidGnss;
     qcomGnssDEPRECATD @31 :Legacy.QcomGnss;
     lidarPtsDEPRECATED @32 :Legacy.LidarPts;
-    navStatusDEPRECATED @38 :Legacy.NavStatus;
+    navStatus @38 :Dp.NavStatus; # dp apk
     trafficEventsDEPRECATED @43 :List(Legacy.TrafficEvent);
     liveLocationTimingDEPRECATED @44 :Legacy.LiveLocationData;
     liveLocationCorrectedDEPRECATED @46 :Legacy.LiveLocationData;
@@ -1356,5 +1360,7 @@ struct Event {
     orbFeaturesSummaryDEPRECATED @58 :Legacy.OrbFeaturesSummary;
     featuresDEPRECATED @10 :Legacy.CalibrationFeatures;
     kalmanOdometryDEPRECATED @65 :Legacy.KalmanOdometry;
+    thermal @79 :Dp.ThermalData; # dp apk
+    dragonConf @80 :Dp.DragonConf;
   }
 }

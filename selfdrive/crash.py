@@ -4,6 +4,12 @@ import sys
 import threading
 import capnp
 from selfdrive.version import version, dirty, origin, branch
+from datetime import datetime
+import traceback
+# from common.params import Params
+import requests
+# from common.dp_common import is_online
+CRASHES_DIR = '/sdcard/crash_logs/'
 
 from selfdrive.hardware import PC
 from selfdrive.swaglog import cloudlog
@@ -29,10 +35,13 @@ else:
     'origin': origin,
     'branch': branch
   }
-  client = Client('https://1994756b5e6f41cf939a4c65de45f4f2:cefebaf3a8aa40d182609785f7189bd7@app.getsentry.com/77924',
-                  install_sys_hook=False, transport=HTTPTransport, release=version, tags=tags)
+  error_tags = {'dirty': dirty, 'branch': branch, 'remote': origin}
+
+  client = Client('http://7107f046f45b4b4f9b277d0684bc9281@sentry.dragonpilot.cn:9000/2',
+                  install_sys_hook=False, transport=HTTPTransport, release=version, tags=error_tags)
 
   def capture_exception(*args, **kwargs):
+    save_exception(traceback.format_exc())
     exc_info = sys.exc_info()
     if not exc_info[0] is capnp.lib.capnp.KjException:
       client.captureException(*args, **kwargs)
@@ -75,3 +84,21 @@ else:
       self.run = run_with_except_hook
 
     threading.Thread.__init__ = init
+
+  # dp - from @ShaneSmiskol, save log into local directory
+  def save_exception(exc_text):
+    if not os.path.exists(CRASHES_DIR):
+      os.mkdir(CRASHES_DIR)
+    log_file = '{}/{}'.format(CRASHES_DIR, datetime.now().strftime('%Y-%m-%d--%H-%M-%S.%f.log')[:-3])
+    with open(log_file, 'w') as f:
+      f.write(exc_text)
+    print('Logged current crash to {}'.format(log_file))
+
+  def capture_warning(warning_string):
+    bind_user()
+    client.captureMessage(warning_string, level='warning')
+
+  def capture_info(info_string):
+    bind_user()
+    client.captureMessage(info_string, level='info')
+

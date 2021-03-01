@@ -351,3 +351,7 @@ bool Params::read_db_bool(const char* param_name) {
   std::vector<char> bytes = read_db_bytes(param_name);
   return bytes.size() > 0 and bytes[0] == '1';
 }
+
+std::string Params::get_params_path() {
+  return default_params_path;
+}
