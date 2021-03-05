@@ -290,7 +290,7 @@ class CarState(CarStateBase):
         ("AEB_CmdAct", "SCC12", 0),
         ("CF_VSM_Warn", "SCC12", 0),
       ]
-
+    checks = []
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, 0)
 
   @staticmethod
@@ -318,5 +318,5 @@ class CarState(CarStateBase):
     checks = [
       ("LKAS11", 100)
     ]
-
+    checks = []
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, 2)
