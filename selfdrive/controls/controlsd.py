@@ -46,6 +46,8 @@ class Controls:
   def __init__(self, sm=None, pm=None, can_sock=None):
     config_realtime_process(3, Priority.CTRL_HIGH)
 
+    params = Params()
+
     # Setup sockets
     self.pm = pm
     if self.pm is None:
@@ -54,10 +56,11 @@ class Controls:
 
     self.sm = sm
     if self.sm is None:
-      ignore = ['ubloxRaw', 'driverCameraState', 'managerState'] if SIMULATION else None
+      ignore = ['ubloxRaw', 'driverCameraState', 'managerState'] if SIMULATION else []
+      ignore += ['driverCameraState'] if params.get('dp_driver_monitor') == b'0' else []
       self.sm = messaging.SubMaster(['deviceState', 'pandaState', 'modelV2', 'liveCalibration', 'ubloxRaw',
                                      'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
-                                     'roadCameraState', 'driverCameraState', 'managerState', 'liveParameters', 'radarState'], ignore_alive=ignore)
+                                     'roadCameraState', 'driverCameraState', 'managerState', 'liveParameters', 'radarState', 'dragonConf'], ignore_alive=ignore)
 
     self.can_sock = can_sock
     if can_sock is None:
@@ -102,12 +105,14 @@ class Controls:
     self.LoC = LongControl(self.CP, self.CI.compute_gb)
     self.VM = VehicleModel(self.CP)
 
-    if self.CP.lateralTuning.which() == 'pid':
-      self.LaC = LatControlPID(self.CP)
+    if params.get('dp_lqr') == b'1':
+      self.LaC = LatControlLQR(self.CP)
     elif self.CP.lateralTuning.which() == 'indi':
       self.LaC = LatControlINDI(self.CP)
     elif self.CP.lateralTuning.which() == 'lqr':
       self.LaC = LatControlLQR(self.CP)
+    elif self.CP.lateralTuning.which() == 'pid':
+      self.LaC = LatControlPID(self.CP)
 
     self.state = State.disabled
     self.enabled = False
@@ -134,8 +139,8 @@ class Controls:
 
     self.startup_event = get_startup_event(car_recognized, controller_available)
 
-    if not sounds_available:
-      self.events.add(EventName.soundsUnavailable, static=True)
+    # if not sounds_available:
+    #   self.events.add(EventName.soundsUnavailable, static=True)
     if community_feature_disallowed:
       self.events.add(EventName.communityFeatureDisallowed, static=True)
     if not car_recognized:
@@ -144,6 +149,11 @@ class Controls:
     # controlsd is driven by can recv, expected at 100Hz
     self.rk = Ratekeeper(100, print_delay_threshold=None)
     self.prof = Profiler(False)  # off by default
+
+    # dp
+    self.dp_camera_offset = CAMERA_OFFSET * 100
+    self.sm['dragonConf'].dpAtl = False
+    self.sm['dragonConf'].dpCameraOffset = self.dp_camera_offset
 
   def update_events(self, CS):
     """Compute carEvents from carState"""
@@ -158,24 +168,24 @@ class Controls:
       self.startup_event = None
 
     # Create events for battery, temperature, disk space, and memory
-    if self.sm['deviceState'].batteryPercent < 1 and self.sm['deviceState'].chargingError:
-      # at zero percent battery, while discharging, OP should not allowed
-      self.events.add(EventName.lowBattery)
-    if self.sm['deviceState'].thermalStatus >= ThermalStatus.red:
-      self.events.add(EventName.overheat)
-    if self.sm['deviceState'].freeSpacePercent < 7:
-      # under 7% of space free no enable allowed
-      self.events.add(EventName.outOfSpace)
+    # if self.sm['deviceState'].batteryPercent < 1 and self.sm['deviceState'].chargingError:
+    #   # at zero percent battery, while discharging, OP should not allowed
+    #   self.events.add(EventName.lowBattery)
+    # if self.sm['deviceState'].thermalStatus >= ThermalStatus.red:
+    #   self.events.add(EventName.overheat)
+    # if self.sm['deviceState'].freeSpacePercent < 7:
+    #   # under 7% of space free no enable allowed
+    #   self.events.add(EventName.outOfSpace)
     if self.sm['deviceState'].memoryUsagePercent  > 90:
       self.events.add(EventName.lowMemory)
 
     # Alert if fan isn't spinning for 5 seconds
-    if self.sm['pandaState'].pandaType in [PandaType.uno, PandaType.dos]:
-      if self.sm['pandaState'].fanSpeedRpm == 0 and self.sm['deviceState'].fanSpeedPercentDesired > 50:
-        if (self.sm.frame - self.last_functional_fan_frame) * DT_CTRL > 5.0:
-          self.events.add(EventName.fanMalfunction)
-      else:
-        self.last_functional_fan_frame = self.sm.frame
+    # if self.sm['pandaState'].pandaType in [PandaType.uno, PandaType.dos]:
+    #   if self.sm['pandaState'].fanSpeedRpm == 0 and self.sm['deviceState'].fanSpeedPercentDesired > 50:
+    #     if (self.sm.frame - self.last_functional_fan_frame) * DT_CTRL > 5.0:
+    #       self.events.add(EventName.fanMalfunction)
+    #   else:
+    #     self.last_functional_fan_frame = self.sm.frame
 
     # Handle calibration status
     cal_status = self.sm['liveCalibration'].calStatus
@@ -201,7 +211,7 @@ class Controls:
       self.events.add(EventName.laneChange)
 
     if self.can_rcv_error or (not CS.canValid and self.sm.frame > 5 / DT_CTRL):
-      self.events.add(EventName.canError)
+      self.events.add(EventName.pcmDisable if self.sm['dragonConf'].dpAtl else EventName.canError)
     if (self.sm['pandaState'].safetyModel != self.CP.safetyModel and self.sm.frame > 2 / DT_CTRL) or \
       self.mismatch_counter >= 200:
       self.events.add(EventName.controlsMismatch)
@@ -251,7 +261,7 @@ class Controls:
         self.events.add(EventName.processNotRunning)
 
     # Only allow engagement with brake pressed when stopped behind another stopped car
-    if CS.brakePressed and self.sm['longitudinalPlan'].vTargetFuture >= STARTING_TARGET_SPEED \
+    if not self.sm['dragonConf'].dpAtl and CS.brakePressed and self.sm['longitudinalPlan'].vTargetFuture >= STARTING_TARGET_SPEED \
       and self.CP.openpilotLongitudinalControl and CS.vEgo < 0.3:
       self.events.add(EventName.noTarget)
 
@@ -260,7 +270,7 @@ class Controls:
 
     # Update carState from CAN
     can_strs = messaging.drain_sock_raw(self.can_sock, wait_for_one=True)
-    CS = self.CI.update(self.CC, can_strs)
+    CS = self.CI.update(self.CC, can_strs, self.sm['dragonConf'])
 
     self.sm.update(0)
 
@@ -278,7 +288,7 @@ class Controls:
     if not self.enabled:
       self.mismatch_counter = 0
 
-    if not self.sm['pandaState'].controlsAllowed and self.enabled:
+    if not self.sm['dragonConf'].dpAtl and self.sm['pandaState'].controlsAllowed and self.enabled:
       self.mismatch_counter += 1
 
     self.distance_traveled += CS.vEgo * DT_CTRL
@@ -401,14 +411,15 @@ class Controls:
       self.saturated_count = 0
 
     # Send a "steering required alert" if saturation count has reached the limit
-    if (lac_log.saturated and not CS.steeringPressed) or \
-       (self.saturated_count > STEER_ANGLE_SATURATION_TIMEOUT):
-      # Check if we deviated from the path
-      left_deviation = actuators.steer > 0 and lat_plan.dPathPoints[0] < -0.1
-      right_deviation = actuators.steer < 0 and lat_plan.dPathPoints[0] > 0.1
+    if self.sm['dragonConf'].dpLatCtrl and self.sm['dragonConf'].dpSteeringLimitAlert:
+      if (lac_log.saturated and not CS.steeringPressed) or \
+         (self.saturated_count > STEER_ANGLE_SATURATION_TIMEOUT):
+        # Check if we deviated from the path
+        left_deviation = actuators.steer > 0 and lat_plan.dPathPoints[0] < -0.1
+        right_deviation = actuators.steer < 0 and lat_plan.dPathPoints[0] > 0.1
 
-      if left_deviation or right_deviation:
-        self.events.add(EventName.steerSaturated)
+        if left_deviation or right_deviation:
+          self.events.add(EventName.steerSaturated)
 
     return actuators, v_acc_sol, a_acc_sol, lac_log
 
@@ -445,10 +456,12 @@ class Controls:
 
     meta = self.sm['modelV2'].meta
     if len(meta.desirePrediction) and ldw_allowed:
+      if self.sm.updated['dragonConf']:
+        self.dp_camera_offset = self.sm['dragonConf'].dpCameraOffset * 0.01 if self.sm['dragonConf'].dpCameraOffset != 0 else 0
       l_lane_change_prob = meta.desirePrediction[Desire.laneChangeLeft - 1]
       r_lane_change_prob = meta.desirePrediction[Desire.laneChangeRight - 1]
-      l_lane_close = left_lane_visible and (self.sm['modelV2'].laneLines[1].y[0] > -(1.08 + CAMERA_OFFSET))
-      r_lane_close = right_lane_visible and (self.sm['modelV2'].laneLines[2].y[0] < (1.08 - CAMERA_OFFSET))
+      l_lane_close = left_lane_visible and (self.sm['modelV2'].laneLines[1].y[0] > -(1.08 + self.dp_camera_offset))
+      r_lane_close = right_lane_visible and (self.sm['modelV2'].laneLines[2].y[0] < (1.08 - self.dp_camera_offset))
 
       CC.hudControl.leftLaneDepart = bool(l_lane_change_prob > LANE_DEPARTURE_THRESHOLD and l_lane_close)
       CC.hudControl.rightLaneDepart = bool(r_lane_change_prob > LANE_DEPARTURE_THRESHOLD and r_lane_close)

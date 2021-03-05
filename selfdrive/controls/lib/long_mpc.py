@@ -8,8 +8,24 @@ from selfdrive.controls.lib.radar_helpers import _LEAD_ACCEL_TAU
 from selfdrive.controls.lib.longitudinal_mpc import libmpc_py
 from selfdrive.controls.lib.drive_helpers import MPC_COST_LONG
 
+from common.params import Params
+from common.dp_time import LAST_MODIFIED_DYNAMIC_FOLLOW
+from common.dp_common import get_last_modified, param_get_if_updated
+
 LOG_MPC = os.environ.get('LOG_MPC', False)
 
+# dp
+PROFILE_C = 3
+PROFILE_B = 2
+PROFILE_A = 1
+PROFILE_OFF = 0
+
+PROFILE_DIST = {
+  0: 1.8,
+  1: 0.9,
+  2: 1.2,
+  3: 1.5,
+}
 
 class LongitudinalMpc():
   def __init__(self, mpc_id):
@@ -27,6 +43,15 @@ class LongitudinalMpc():
     self.last_cloudlog_t = 0.0
     self.n_its = 0
     self.duration = 0
+
+    # dp params
+    self.last_ts = 0.
+    self.modified = None
+    self.last_modified = None
+    self.last_modified_check = None
+    self.dp_tr_profile = PROFILE_OFF
+    self.dp_tr_profile_last_modified = None
+    self.params = Params()
 
   def publish(self, pm):
     if LOG_MPC:
@@ -62,6 +87,12 @@ class LongitudinalMpc():
   def update(self, CS, lead):
     v_ego = CS.vEgo
 
+    # dp
+    self.last_modified_check, self.modified = get_last_modified(LAST_MODIFIED_DYNAMIC_FOLLOW, self.last_modified_check, self.modified)
+    if self.last_modified != self.modified:
+      self.dp_tr_profile, self.dp_tr_profile_last_modified = param_get_if_updated("dp_dynamic_follow", "int", self.dp_tr_profile, self.dp_tr_profile_last_modified)
+    TR = PROFILE_DIST[self.dp_tr_profile]
+
     # Setup current mpc state
     self.cur_state[0].x_ego = 0.0
 
@@ -94,7 +125,7 @@ class LongitudinalMpc():
 
     # Calculate mpc
     t = sec_since_boot()
-    self.n_its = self.libmpc.run_mpc(self.cur_state, self.mpc_solution, self.a_lead_tau, a_lead)
+    self.n_its = self.libmpc.run_mpc(self.cur_state, self.mpc_solution, self.a_lead_tau, a_lead, TR)
     self.duration = int((sec_since_boot() - t) * 1e9)
 
     # Get solution. MPC timestep is 0.2 s, so interpolation to 0.05 s is needed
