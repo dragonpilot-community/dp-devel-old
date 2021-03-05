@@ -422,3 +422,7 @@ DBC = {
 }
 
 STEER_THRESHOLD = 150
+
+ECU_FINGERPRINT = {
+  Ecu.fwdCamera: [832, 1156, 1191, 1342]
+}
