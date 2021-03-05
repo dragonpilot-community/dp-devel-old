@@ -2,6 +2,8 @@ from common.numpy_fast import interp
 import numpy as np
 from selfdrive.hardware import EON, TICI
 from cereal import log
+from common.dp_common import get_last_modified, param_get_if_updated
+from common.dp_time import LAST_MODIFIED_LANE_PLANNER
 
 
 TRAJECTORY_SIZE = 33
@@ -21,9 +23,9 @@ class LanePlanner:
     self.ll_x = np.zeros((TRAJECTORY_SIZE,))
     self.lll_y = np.zeros((TRAJECTORY_SIZE,))
     self.rll_y = np.zeros((TRAJECTORY_SIZE,))
-    self.lane_width_estimate = 3.7
+    self.lane_width_estimate = 2.85
     self.lane_width_certainty = 1.0
-    self.lane_width = 3.7
+    self.lane_width = 2.85
 
     self.lll_prob = 0.
     self.rll_prob = 0.
@@ -35,15 +37,27 @@ class LanePlanner:
     self.l_lane_change_prob = 0.
     self.r_lane_change_prob = 0.
 
+    # dp
+    self.dp_camera_offset = CAMERA_OFFSET * 100
+    self.last_modified_dp_camera_offset = None
+    self.modified = None
+    self.last_modified = None
+    self.last_modified_check = None
 
   def parse_model(self, md):
     if len(md.laneLines) == 4 and len(md.laneLines[0].t) == TRAJECTORY_SIZE:
+      self.last_modified_check, self.modified = get_last_modified(LAST_MODIFIED_LANE_PLANNER, self.last_modified_check, self.modified)
+      if self.last_modified != self.modified:
+        self.dp_camera_offset, self.last_modified_dp_camera_offset = param_get_if_updated("dp_camera_offset", "int", self.dp_camera_offset, self.last_modified_dp_camera_offset)
+        self.last_modified = self.modified
+      offset = self.dp_camera_offset * 0.01 if self.dp_camera_offset != 0 else 0
+
       self.ll_t = (np.array(md.laneLines[1].t) + np.array(md.laneLines[2].t))/2
       # left and right ll x is the same
       self.ll_x = md.laneLines[1].x
       # only offset left and right lane lines; offsetting path does not make sense
-      self.lll_y = np.array(md.laneLines[1].y) - CAMERA_OFFSET
-      self.rll_y = np.array(md.laneLines[2].y) - CAMERA_OFFSET
+      self.lll_y = np.array(md.laneLines[1].y) - offset
+      self.rll_y = np.array(md.laneLines[2].y) - offset
       self.lll_prob = md.laneLineProbs[1]
       self.rll_prob = md.laneLineProbs[2]
       self.lll_std = md.laneLineStds[1]

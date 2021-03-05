@@ -32,6 +32,43 @@ _A_CRUISE_MAX_BP = [0.,  6.4, 22.5, 40.]
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
+# dp
+DP_OFF = 0
+DP_ECO = 1
+DP_NORMAL = 2
+DP_SPORT = 3
+# accel profile by @arne182
+_DP_CRUISE_MIN_V = [-2.0, -1.5, -1.0, -0.7, -0.5]
+_DP_CRUISE_MIN_V_ECO = [-1.0, -0.7, -0.6, -0.5, -0.3]
+_DP_CRUISE_MIN_V_SPORT = [-3.0, -2.6, -2.3, -2.0, -1.0]
+_DP_CRUISE_MIN_V_FOLLOWING = [-4.0, -4.0, -3.5, -2.5, -2.0]
+_DP_CRUISE_MIN_BP = [0.0, 5.0, 10.0, 20.0, 55.0]
+
+_DP_CRUISE_MAX_V = [2.0, 2.0, 1.5, .5, .3]
+_DP_CRUISE_MAX_V_ECO = [0.8, 0.9, 1.0, 0.4, 0.2]
+_DP_CRUISE_MAX_V_SPORT = [3.0, 3.5, 3.0, 2.0, 2.0]
+_DP_CRUISE_MAX_V_FOLLOWING = [1.6, 1.4, 1.4, .7, .3]
+_DP_CRUISE_MAX_BP = [0., 5., 10., 20., 55.]
+
+# Lookup table for turns
+_DP_TOTAL_MAX_V = [3.3, 3.0, 3.9]
+_DP_TOTAL_MAX_BP = [0., 25., 55.]
+
+def dp_calc_cruise_accel_limits(v_ego, following, dp_profile):
+  if following:
+    a_cruise_min = interp(v_ego, _DP_CRUISE_MIN_BP, _DP_CRUISE_MIN_V_FOLLOWING)
+    a_cruise_max = interp(v_ego, _DP_CRUISE_MAX_BP, _DP_CRUISE_MAX_V_FOLLOWING)
+  else:
+    if dp_profile == DP_ECO:
+      a_cruise_min = interp(v_ego, _DP_CRUISE_MIN_BP, _DP_CRUISE_MIN_V_ECO)
+      a_cruise_max = interp(v_ego, _DP_CRUISE_MAX_BP, _DP_CRUISE_MAX_V_ECO)
+    elif dp_profile == DP_SPORT:
+      a_cruise_min = interp(v_ego, _DP_CRUISE_MIN_BP, _DP_CRUISE_MIN_V_SPORT)
+      a_cruise_max = interp(v_ego, _DP_CRUISE_MAX_BP, _DP_CRUISE_MAX_V_SPORT)
+    else:
+      a_cruise_min = interp(v_ego, _DP_CRUISE_MIN_BP, _DP_CRUISE_MIN_V)
+      a_cruise_max = interp(v_ego, _DP_CRUISE_MAX_BP, _DP_CRUISE_MAX_V)
+  return np.vstack([a_cruise_min, a_cruise_max])
 
 def calc_cruise_accel_limits(v_ego, following):
   a_cruise_min = interp(v_ego, _A_CRUISE_MIN_BP, _A_CRUISE_MIN_V)
@@ -83,6 +120,9 @@ class Planner():
     self.params = Params()
     self.first_loop = True
 
+    # dp
+    self.dp_profile = DP_OFF
+
   def choose_solution(self, v_cruise_setpoint, enabled):
     if enabled:
       solutions = {'cruise': self.v_cruise}
@@ -130,7 +170,11 @@ class Planner():
 
     # Calculate speed for normal cruise control
     if enabled and not self.first_loop and not sm['carState'].gasPressed:
-      accel_limits = [float(x) for x in calc_cruise_accel_limits(v_ego, following)]
+      self.dp_profile = sm['dragonConf'].dpAccelProfile
+      if self.dp_profile == DP_OFF:
+        accel_limits = [float(x) for x in calc_cruise_accel_limits(v_ego, following)]
+      else:
+        accel_limits = [float(x) for x in dp_calc_cruise_accel_limits(v_ego, following, self.dp_profile)]
       jerk_limits = [min(-0.1, accel_limits[0]), max(0.1, accel_limits[1])]  # TODO: make a separate lookup for jerk tuning
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
 
