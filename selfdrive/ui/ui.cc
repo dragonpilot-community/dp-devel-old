@@ -42,7 +42,7 @@ static void ui_init_vision(UIState *s) {
 
 void ui_init(UIState *s) {
   s->sm = new SubMaster({"modelV2", "controlsState", "uiLayoutState", "liveCalibration", "radarState", "deviceState", "roadCameraState", "liveLocationKalman",
-                         "pandaState", "carParams", "driverState", "driverMonitoringState", "sensorEvents", "carState", "ubloxGnss"});
+                         "pandaState", "carParams", "driverState", "driverMonitoringState", "sensorEvents", "carState", "ubloxGnss", "dragonConf"});
 
   s->started = false;
   s->status = STATUS_OFFROAD;
@@ -125,10 +125,28 @@ static void update_sockets(UIState *s) {
 
   UIScene &scene = s->scene;
   if (s->started && sm.updated("controlsState")) {
-    scene.controls_state = sm["controlsState"].getControlsState();
+    auto event = sm["controlsState"];
+    auto data = event.getControlsState();
+    scene.controls_state = data;
+    // dp - steer data
+    scene.angleSteers = data.getAngleSteers();
+    scene.angleSteersDes = data.getSteeringAngleDesiredDeg();
   }
   if (sm.updated("carState")) {
-    scene.car_state = sm["carState"].getCarState();
+    auto event = sm["carState"];
+    auto data = event.getCarState();
+    scene.car_state = data;
+
+    // dp - blinker / reversing
+    if(scene.leftBlinker != data.getLeftBlinker() || scene.rightBlinker != data.getRightBlinker()) {
+      scene.blinker_blinkingrate = 100;
+    }
+    scene.leftBlinker = data.getLeftBlinker();
+    scene.rightBlinker = data.getRightBlinker();
+    scene.brakeLights = data.getBrakeLights();
+    scene.isReversing = data.getGearShifter() == cereal::CarState::GearShifter::REVERSE;
+    scene.leftBlindspot = data.getLeftBlindspot();
+    scene.rightBlindspot = data.getRightBlindspot();
   }
   if (sm.updated("radarState")) {
     auto radar_state = sm["radarState"].getRadarState();
@@ -205,6 +223,34 @@ static void update_sockets(UIState *s) {
       }
     }
   }
+  if (sm.updated("dragonConf")) {
+    auto data = sm["dragonConf"].getDragonConf();
+    scene.dpDashcam = data.getDpDashcam();
+    scene.dpDashcamUi = data.getDpDashcamUi();
+    scene.dpFullScreenApp = data.getDpAppWaze() || data.getDpAppHr();
+    scene.dpDrivingUi = data.getDpDrivingUi();
+    scene.dpUiScreenOffReversing = data.getDpUiScreenOffReversing();
+    scene.dpUiScreenOffDriving = data.getDpUiScreenOffDriving();
+    scene.dpUiSpeed = data.getDpUiSpeed();
+    scene.dpUiEvent = data.getDpUiEvent();
+    scene.dpUiMaxSpeed = data.getDpUiMaxSpeed();
+    scene.dpUiFace = data.getDpUiFace();
+    scene.dpUiLane = data.getDpUiLane();
+    scene.dpUiPath = data.getDpUiPath();
+    scene.dpUiLead = data.getDpUiLead();
+    scene.dpUiDev = data.getDpUiDev();
+    scene.dpUiDevMini = data.getDpUiDevMini();
+    scene.dpUiBlinker = data.getDpUiBlinker();
+    scene.dpUiBrightness = data.getDpUiBrightness();
+    scene.dpUiVolumeBoost = data.getDpUiVolumeBoost();
+    scene.dpDynamicFollow = data.getDpDynamicFollow();
+    scene.dpAccelProfile = data.getDpAccelProfile();
+
+    scene.dpIpAddr = data.getDpIpAddr();
+    scene.dpLocale = data.getDpLocale();
+    scene.dpIsUpdating = data.getDpIsUpdating();
+    scene.dpAthenad = data.getDpAthenad();
+  }
   s->started = scene.deviceState.getStarted() || scene.frontview;
 }
 
@@ -229,7 +275,7 @@ static void update_alert(UIState *s) {
   // Handle controls timeout
   if (scene.deviceState.getStarted() && (s->sm->frame - s->started_frame) > 10 * UI_FREQ) {
     const uint64_t cs_frame = s->sm->rcv_frame("controlsState");
-    if (cs_frame < s->started_frame) {
+    if ((!s->scene.dpUiScreenOffReversing && !s->scene.dpUiScreenOffDriving) && cs_frame < s->started_frame) {
       // car is started, but controlsState hasn't been seen at all
       scene.alert_text1 = "openpilot Unavailable";
       scene.alert_text2 = "Waiting for controls to start";

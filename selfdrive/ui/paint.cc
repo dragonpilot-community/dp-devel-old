@@ -13,6 +13,7 @@
 #include "nanovg_gl_utils.h"
 #include "paint.hpp"
 #include "sidebar.hpp"
+#include "paint_dp.hpp"
 
 
 // TODO: this is also hardcoded in common/transformations/camera.py
@@ -172,21 +173,24 @@ static void draw_frame(UIState *s) {
 static void ui_draw_vision_lane_lines(UIState *s) {
   const UIScene &scene = s->scene;
   // paint lanelines
-  for (int i = 0; i < std::size(scene.lane_line_vertices); i++) {
-    NVGcolor color = nvgRGBAf(1.0, 1.0, 1.0, scene.lane_line_probs[i]);
-    ui_draw_line(s, scene.lane_line_vertices[i], &color, nullptr);
-  }
+  if (scene.dpUiLane) {
+    for (int i = 0; i < std::size(scene.lane_line_vertices); i++) {
+      NVGcolor color = nvgRGBAf(1.0, 1.0, 1.0, scene.lane_line_probs[i]);
+      ui_draw_line(s, scene.lane_line_vertices[i], &color, nullptr);
+    }
 
-  // paint road edges
-  for (int i = 0; i < std::size(scene.road_edge_vertices); i++) {
-    NVGcolor color = nvgRGBAf(1.0, 0.0, 0.0, std::clamp<float>(1.0 - scene.road_edge_stds[i], 0.0, 1.0));
-    ui_draw_line(s, scene.road_edge_vertices[i], &color, nullptr);
+    // paint road edges
+    for (int i = 0; i < std::size(scene.road_edge_vertices); i++) {
+      NVGcolor color = nvgRGBAf(1.0, 0.0, 0.0, std::clamp<float>(1.0 - scene.road_edge_stds[i], 0.0, 1.0));
+      ui_draw_line(s, scene.road_edge_vertices[i], &color, nullptr);
+    }
   }
-
   // paint path
-  NVGpaint track_bg = nvgLinearGradient(s->vg, s->fb_w, s->fb_h, s->fb_w, s->fb_h * .4,
-                                        COLOR_WHITE, COLOR_WHITE_ALPHA(0));
-  ui_draw_line(s, scene.track_vertices, nullptr, &track_bg);
+  if (scene.dpUiPath) {
+    NVGpaint track_bg = nvgLinearGradient(s->vg, s->fb_w, s->fb_h, s->fb_w, s->fb_h * .4,
+                                          COLOR_WHITE, COLOR_WHITE_ALPHA(0));
+    ui_draw_line(s, scene.track_vertices, nullptr, &track_bg);
+  }
 }
 
 // Draw all world space objects.
@@ -199,7 +203,7 @@ static void ui_draw_world(UIState *s) {
   ui_draw_vision_lane_lines(s);
 
   // Draw lead indicators if openpilot is handling longitudinal
-  if (s->longitudinal_control) {
+  if (s->scene.dpUiLead) {
     if (scene->lead_data[0].getStatus()) {
       draw_lead(s, 0);
     }
@@ -233,9 +237,38 @@ static void ui_draw_vision_maxspeed(UIState *s) {
 static void ui_draw_vision_speed(UIState *s) {
   const float speed = std::max(0.0, s->scene.car_state.getVEgo() * (s->is_metric ? 3.6 : 2.2369363));
   const std::string speed_str = std::to_string((int)std::nearbyint(speed));
+//  const int viz_speed_w = 280;
+//  const int viz_speed_x = viz_rect.centerX() - viz_speed_w/2;
   nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
-  ui_draw_text(s, s->viz_rect.centerX(), 240, speed_str.c_str(), 96 * 2.5, COLOR_WHITE, "sans-bold");
-  ui_draw_text(s, s->viz_rect.centerX(), 320, s->is_metric ? "km/h" : "mph", 36 * 2.5, COLOR_WHITE_ALPHA(200), "sans-regular");
+  if (s->scene.dpUiSpeed) {
+    ui_draw_text(s, s->viz_rect.centerX(), 240, speed_str.c_str(), 96 * 2.5, COLOR_WHITE, "sans-bold");
+    ui_draw_text(s, s->viz_rect.centerX(), 320, s->is_metric ? "km/h" : "mph", 36 * 2.5, COLOR_WHITE_ALPHA(200), "sans-regular");
+  }
+  // dp blinker, from kegman
+  if (s->scene.dpUiBlinker) {
+//    if(s->scene.leftBlinker) {
+//      nvgBeginPath(s->vg);
+//      nvgMoveTo(s->vg, viz_speed_x, viz_rect.y + header_h/4);
+//      nvgLineTo(s->vg, viz_speed_x - viz_speed_w/2, viz_rect.y + header_h/4 + header_h/4);
+//      nvgLineTo(s->vg, viz_speed_x, viz_rect.y + header_h/2 + header_h/4);
+//      nvgClosePath(s->vg);
+//      nvgFillColor(s->vg, nvgRGBA(0,255,0,s->scene.blinker_blinkingrate>=60?190:30));
+//      nvgFill(s->vg);
+//    }
+//    if(s->scene.rightBlinker) {
+//      nvgBeginPath(s->vg);
+//      nvgMoveTo(s->vg, viz_speed_x+viz_speed_w, viz_rect.y + header_h/4);
+//      nvgLineTo(s->vg, viz_speed_x+viz_speed_w + viz_speed_w/2, viz_rect.y + header_h/4 + header_h/4);
+//      nvgLineTo(s->vg, viz_speed_x+viz_speed_w, viz_rect.y + header_h/2 + header_h/4);
+//      nvgClosePath(s->vg);
+//      nvgFillColor(s->vg, nvgRGBA(0,255,0,s->scene.blinker_blinkingrate>=60?190:30));
+//      nvgFill(s->vg);
+//    }
+    if(s->scene.leftBlinker || s->scene.rightBlinker) {
+      s->scene.blinker_blinkingrate -= 3;
+      if(s->scene.blinker_blinkingrate<0) s->scene.blinker_blinkingrate = 120;
+    }
+  }
 }
 
 static void ui_draw_vision_event(UIState *s) {
@@ -308,13 +341,39 @@ static void ui_draw_vision_header(UIState *s) {
 
   ui_fill_rect(s->vg, {s->viz_rect.x, s->viz_rect.y, s->viz_rect.w, header_h}, gradient);
 
-  ui_draw_vision_maxspeed(s);
-  ui_draw_vision_speed(s);
-  ui_draw_vision_event(s);
+  if (s->scene.dpUiMaxSpeed) {
+    ui_draw_vision_maxspeed(s);
+  }
+  if (s->scene.dpUiSpeed) {
+    ui_draw_vision_speed(s);
+  }
+  if (s->scene.dpUiEvent) {
+    ui_draw_vision_event(s);
+  }
 }
 
 static void ui_draw_vision_footer(UIState *s) {
-  ui_draw_vision_face(s);
+  if (s->scene.dpUiFace) {
+    ui_draw_vision_face(s);
+  }
+  if ((int)s->scene.dpDynamicFollow > 0) {
+    ui_draw_df_button(s);
+  }
+  if ((int)s->scene.dpAccelProfile > 0) {
+    ui_draw_ap_button(s);
+  }
+  if (s->scene.dpUiDev) {
+    ui_draw_bbui(s);
+  }
+  if (s->scene.dpUiDevMini) {
+    ui_draw_blindspots(s, true);
+    ui_draw_infobar(s);
+  } else {
+    ui_draw_blindspots(s, false);
+  }
+  if (s->scene.dpDashcamUi) {
+    ui_draw_rec_button(s);
+  }
 }
 
 static float get_alert_alpha(float blink_rate) {
@@ -325,30 +384,31 @@ static void ui_draw_vision_alert(UIState *s) {
   static std::map<cereal::ControlsState::AlertSize, const int> alert_size_map = {
       {cereal::ControlsState::AlertSize::SMALL, 241},
       {cereal::ControlsState::AlertSize::MID, 390},
-      {cereal::ControlsState::AlertSize::FULL, s->fb_h}};
+      {cereal::ControlsState::AlertSize::FULL, s->fb_h - 150}};
+
   const UIScene *scene = &s->scene;
-  bool longAlert1 = scene->alert_text1.length() > 15;
+  bool longAlert1 = true;
 
   NVGcolor color = bg_colors[s->status];
   color.a *= get_alert_alpha(scene->alert_blinking_rate);
   const int alr_h = alert_size_map[scene->alert_size] + bdr_s;
-  const Rect rect = {.x = s->viz_rect.x - bdr_s,
-                  .y = s->fb_h - alr_h,
-                  .w = s->viz_rect.w + (bdr_s * 2),
-                  .h = alr_h};
+  const Rect rect = {.x = s->viz_rect.x - bdr_s + 100,
+                  .y = s->fb_h - alr_h - 100,
+                  .w = s->viz_rect.w + (bdr_s * 2) - 200,
+                  .h = alr_h - 100};
 
-  ui_fill_rect(s->vg, rect, color);
-  ui_fill_rect(s->vg, rect, nvgLinearGradient(s->vg, rect.x, rect.y, rect.x, rect.bottom(), 
-                                            nvgRGBAf(0.0, 0.0, 0.0, 0.05), nvgRGBAf(0.0, 0.0, 0.0, 0.35)));
+  ui_fill_rect(s->vg, rect, color, 20);
+  ui_fill_rect(s->vg, rect, nvgLinearGradient(s->vg, rect.x, rect.y, rect.x, rect.bottom(),
+                                            nvgRGBAf(0.0, 0.0, 0.0, 0.05), nvgRGBAf(0.0, 0.0, 0.0, 0.35)), 20);
 
   nvgFillColor(s->vg, COLOR_WHITE);
   nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
 
   if (scene->alert_size == cereal::ControlsState::AlertSize::SMALL) {
-    ui_draw_text(s, rect.centerX(), rect.centerY() + 15, scene->alert_text1.c_str(), 40*2.5, COLOR_WHITE, "sans-semibold");
+    ui_draw_text(s, rect.centerX(), rect.centerY() + 15, scene->alert_text1.c_str(), 32*2.5, COLOR_WHITE, "sans-semibold");
   } else if (scene->alert_size == cereal::ControlsState::AlertSize::MID) {
     ui_draw_text(s, rect.centerX(), rect.centerY() - 45, scene->alert_text1.c_str(), 48*2.5, COLOR_WHITE, "sans-bold");
-    ui_draw_text(s, rect.centerX(), rect.centerY() + 75, scene->alert_text2.c_str(), 36*2.5, COLOR_WHITE, "sans-regular");
+    ui_draw_text(s, rect.centerX(), rect.centerY() + 75, scene->alert_text2.c_str(), 28*2.5, COLOR_WHITE, "sans-regular");
   } else if (scene->alert_size == cereal::ControlsState::AlertSize::FULL) {
     nvgFontSize(s->vg, (longAlert1?72:96)*2.5);
     nvgFontFace(s->vg, "sans-bold");
@@ -357,7 +417,7 @@ static void ui_draw_vision_alert(UIState *s) {
     nvgFontSize(s->vg, 48*2.5);
     nvgFontFace(s->vg,  "sans-regular");
     nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-    nvgTextBox(s->vg, rect.x, rect.h-(longAlert1?300:360), rect.w-60, scene->alert_text2.c_str(), NULL);
+    nvgTextBox(s->vg, rect.x, rect.h-(longAlert1?150:210), rect.w-60, scene->alert_text2.c_str(), NULL);
   }
 }
 
@@ -514,9 +574,10 @@ void ui_nvg_init(UIState *s) {
 
   // init fonts
   std::pair<const char *, const char *> fonts[] = {
-      {"sans-regular", "../assets/fonts/opensans_regular.ttf"},
-      {"sans-semibold", "../assets/fonts/opensans_semibold.ttf"},
-      {"sans-bold", "../assets/fonts/opensans_bold.ttf"},
+      {"courbd", "../assets/fonts/courbd.ttf"},
+      {"sans-regular", "../../dragonpilot/cjk-fonts/NotoSansCJKtc-Regular.otf"},
+      {"sans-semibold", "../../dragonpilot/cjk-fonts/NotoSansCJKtc-Medium.otf"},
+      {"sans-bold", "../../dragonpilot/cjk-fonts/NotoSansCJKtc-Bold.otf"},
   };
   for (auto [name, file] : fonts) {
     int font_id = nvgCreateFont(s->vg, name, file);

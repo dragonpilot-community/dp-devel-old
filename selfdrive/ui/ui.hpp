@@ -36,6 +36,7 @@
 #define COLOR_WHITE_ALPHA(x) nvgRGBA(255, 255, 255, x)
 #define COLOR_YELLOW nvgRGBA(218, 202, 37, 255)
 #define COLOR_RED nvgRGBA(201, 34, 49, 255)
+#define COLOR_RED_ALPHA(x) nvgRGBA(201, 34, 49, x)
 
 #define UI_BUF_COUNT 4
 
@@ -58,6 +59,23 @@ const Rect settings_btn = {50, 35, 200, 117};
 const Rect home_btn = {60, 1080 - 180 - 40, 180, 180};
 
 const int UI_FREQ = 20;   // Hz
+
+// dp - dynamic follow btn
+const int df_btn_h = 180;
+const int df_btn_w = 180;
+const int df_btn_x = 1650;
+const int df_btn_y = 750;
+// dp - accel profile btn
+const int ap_btn_h = 180;
+const int ap_btn_w = 180;
+const int ap_btn_x = 1450;
+const int ap_btn_y = 750;
+const int info_bar_h = 80;
+// dp - rec btn
+const int rec_btn_h = 130;
+const int rec_btn_w = 180;
+const int rec_btn_x = 870;
+const int rec_btn_y = 800;
 
 typedef enum NetStatus {
   NET_CONNECTED,
@@ -131,6 +149,49 @@ typedef struct UIScene {
 
   // lead
   vertex_data lead_vertices[2];
+
+  // dp
+  bool dpDashcam;
+  bool dpDashcamUi;
+  bool dpFullScreenApp;
+  bool dpDrivingUi;
+  bool dpUiScreenOffReversing;
+  bool dpUiScreenOffDriving;
+  bool dpUiSpeed;
+  bool dpUiEvent;
+  bool dpUiMaxSpeed;
+  bool dpUiFace;
+  bool dpUiLane;
+  bool dpUiPath;
+  bool dpUiLead;
+  bool dpUiDev;
+  bool dpUiDevMini;
+  bool dpUiBlinker;
+  int dpUiBrightness;
+  int dpUiVolumeBoost;
+  std::string dpIpAddr;
+  // for minimal UI
+  float angleSteersDes;
+  float angleSteers;
+  // for black screen on reversing
+  bool isReversing;
+  // for blinker, from kegman
+  bool leftBlinker;
+  bool rightBlinker;
+  bool brakeLights;
+  int blinker_blinkingrate;
+  // for blind spot
+  bool leftBlindspot;
+  bool rightBlindspot;
+  // for updating icon
+  int dp_alert_rate;
+  int dp_alert_type;
+  std::string dpLocale;
+  bool dpIsUpdating;
+  bool dpAthenad;
+  int dpDynamicFollow;
+  int dpAccelProfile;
+
 } UIScene;
 
 typedef struct UIState {

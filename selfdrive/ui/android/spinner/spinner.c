@@ -117,19 +117,6 @@ int main(int argc, char** argv) {
     nvgRect(vg, 0, 0, fb_w, fb_h);
     nvgFill(vg);
 
-    // spin track
-    nvgSave(vg);
-    nvgTranslate(vg, spinner_img_xc, spinner_img_yc);
-    nvgRotate(vg, (3.75*M_PI * cnt/120.0));
-    nvgTranslate(vg, -spinner_img_xc, -spinner_img_yc);
-    NVGpaint spinner_imgPaint = nvgImagePattern(vg, spinner_img_x, spinner_img_y,
-      spinner_img_s, spinner_img_s, 0, spinner_img, 0.6f);
-    nvgBeginPath(vg);
-    nvgFillPaint(vg, spinner_imgPaint);
-    nvgRect(vg, spinner_img_x, spinner_img_y, spinner_img_s, spinner_img_s);
-    nvgFill(vg);
-    nvgRestore(vg);
-
     // comma
     NVGpaint comma_imgPaint = nvgImagePattern(vg, spinner_img_x, spinner_img_y,
       spinner_img_s, spinner_img_s, 0, spinner_comma_img, 1.0f);

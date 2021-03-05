@@ -41,6 +41,10 @@ static void handle_display_state(UIState *s, bool user_input) {
   }
 
   // determine desired state
+  if (s->scene.dpUiScreenOffReversing && s->scene.isReversing) {
+    should_wake = false;
+    awake_timeout = 0;
+  }
   if (should_wake) {
     awake_timeout = 30*UI_FREQ;
   } else if (awake_timeout > 0){
@@ -59,6 +63,52 @@ static void handle_display_state(UIState *s, bool user_input) {
       system("service call window 18 i32 1");
     }
   }
+}
+
+static bool handle_dp_btn_touch(UIState *s, int touch_x, int touch_y) {
+  bool update_dp_last_modified = false ;
+  //dfButton manager  // code below thanks to kumar: https://github.com/arne182/openpilot/commit/71d5aac9f8a3f5942e89634b20cbabf3e19e3e78
+  if (s->started && s->active_app != cereal::UiLayoutState::App::SETTINGS) {
+    if (s->scene.dpDynamicFollow > 0 && touch_x >= df_btn_x && touch_x <= (df_btn_x + df_btn_w) && touch_y >= df_btn_y && touch_y <= (df_btn_y + df_btn_h)) {
+      int val = s->scene.dpDynamicFollow;
+      val++;
+      if (val >= 5) {
+        val = 1;
+      }
+
+      char str[2] = {0};
+      sprintf(str, "%d", val);
+      Params().write_db_value("dp_dynamic_follow", str, 1);
+      update_dp_last_modified = true;
+
+    } else if (s->scene.dpAccelProfile > 0 && touch_x >= ap_btn_x && touch_x <= (ap_btn_x + ap_btn_w) && touch_y >= ap_btn_y && touch_y <= (ap_btn_y + ap_btn_h)) {
+      int val = s->scene.dpAccelProfile;
+      val++;
+      if (val >= 4) {
+        val = 1;
+      }
+
+      char str[2] = {0};
+      sprintf(str, "%d", val);
+      Params().write_db_value("dp_accel_profile", str, 1);
+      update_dp_last_modified = true;
+
+    } else if (s->scene.dpDashcamUi && touch_x >= rec_btn_x && touch_x <= (rec_btn_x + rec_btn_w) && touch_y >= rec_btn_y && touch_y <= (rec_btn_y + rec_btn_h)) {
+      char str[2] = {0};
+      sprintf(str, "%d", !s->scene.dpDashcam);
+      Params().write_db_value("dp_dashcam", str, 1);
+      update_dp_last_modified = true;
+    }
+  }
+
+  if ( update_dp_last_modified ) {
+      char time_str[11];
+      snprintf(time_str, 11, "%lu", time(NULL));
+      Params().write_db_value("dp_last_modified", time_str, 11);
+      return true;
+  }
+
+  return false;
 }
 
 static void handle_vision_touch(UIState *s, int touch_x, int touch_y) {
@@ -140,6 +190,10 @@ int main(int argc, char* argv[]) {
   const int MAX_VOLUME = LEON ? 15 : 12;
   s->sound->setVolume(MIN_VOLUME);
 
+  // dp
+  s->scene.dp_alert_rate = 0;
+  s->scene.dp_alert_type = 1;
+
   while (!do_exit) {
     if (!s->started) {
       util::sleep_for(50);
@@ -152,8 +206,10 @@ int main(int argc, char* argv[]) {
     int touch_x = -1, touch_y = -1;
     int touched = touch_poll(&touch, &touch_x, &touch_y, 0);
     if (touched == 1) {
-      handle_sidebar_touch(s, touch_x, touch_y);
-      handle_vision_touch(s, touch_x, touch_y);
+      if (!handle_dp_btn_touch(s, touch_x, touch_y)) {
+        handle_sidebar_touch(s, touch_x, touch_y);
+        handle_vision_touch(s, touch_x, touch_y);
+      }
     }
 
     // Don't waste resources on drawing in case screen is off
@@ -163,13 +219,20 @@ int main(int argc, char* argv[]) {
     }
 
     // up one notch every 5 m/s
-    s->sound->setVolume(fmin(MAX_VOLUME, MIN_VOLUME + s->scene.car_state.getVEgo() / 5));
+    float min = MIN_VOLUME + s->scene.car_state.getVEgo() / 5;
+    if (s->scene.dpUiVolumeBoost != 0) {
+      min = min * (1 + s->scene.dpUiVolumeBoost * 0.01);
+    }
+    s->sound->setVolume(fmin(MAX_VOLUME, min));
 
     // set brightness
-    float clipped_brightness = fmin(512, (s->light_sensor*brightness_m) + brightness_b);
-    smooth_brightness = fmin(255, clipped_brightness * 0.01 + smooth_brightness * 0.99);
-    ui_set_brightness(s, (int)smooth_brightness);
-
+    if (s->scene.dpUiBrightness == 0) {
+      float clipped_brightness = fmin(512, (s->light_sensor*brightness_m) + brightness_b);
+      smooth_brightness = fmin(255, clipped_brightness * 0.01 + smooth_brightness * 0.99);
+      ui_set_brightness(s, (int)smooth_brightness);
+    } else {
+      ui_set_brightness(s, (int)(255*s->scene.dpUiBrightness*0.01));
+    }
     update_offroad_layout_state(s, pm);
 
     ui_draw(s);
