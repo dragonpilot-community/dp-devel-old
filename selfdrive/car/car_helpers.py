@@ -24,8 +24,8 @@ def get_startup_event(car_recognized, controller_available):
     event = EventName.startupNoCar
   elif car_recognized and not controller_available:
     event = EventName.startupNoControl
-  elif EON and "letv" not in open("/proc/cmdline").read():
-    event = EventName.startupOneplus
+  # elif EON and "letv" not in open("/proc/cmdline").read():
+  #   event = EventName.startupOneplus
   return event
 
 
@@ -85,14 +85,24 @@ def only_toyota_left(candidate_cars):
 
 # **** for use live only ****
 def fingerprint(logcan, sendcan):
+  params = Params()
+  car_selected = params.get('dp_car_selected', encoding='utf8')
+  car_detected = params.get('dp_car_detected', encoding='utf8')
+  cached_params = params.get("CarParamsCache")
+  if cached_params is None and car_selected == "" and car_detected != "":
+    params.put('dp_car_selected', car_detected)
+    params.put('dp_car_detected', "")
+
   fixed_fingerprint = os.environ.get('FINGERPRINT', "")
+  if fixed_fingerprint == "" and cached_params is None and car_selected != "":
+    fixed_fingerprint = car_selected
   skip_fw_query = os.environ.get('SKIP_FW_QUERY', False)
 
   if not fixed_fingerprint and not skip_fw_query:
     # Vin query only reliably works thorugh OBDII
     bus = 1
 
-    cached_params = Params().get("CarParamsCache")
+    # cached_params = Params().get("CarParamsCache")
     if cached_params is not None:
       cached_params = car.CarParams.from_bytes(cached_params)
       if cached_params.carName == "mock":
@@ -167,6 +177,7 @@ def fingerprint(logcan, sendcan):
     source = car.CarParams.FingerprintSource.fixed
 
   cloudlog.warning("fingerprinted %s", car_fingerprint)
+  put_nonblocking('dp_car_detected', car_fingerprint)
   return car_fingerprint, finger, vin, car_fw, source
 
 
